@@ -4,6 +4,7 @@ import itertools
 
 import numpy as np
 import pandas as pd
+from scipy.signal import fftconvolve
 
 from . import solutions
 
@@ -78,21 +79,102 @@ def total_depletion(schedule, bores, solution, p):
     return pd.DataFrame(per_bore, index=schedule.index)
 
 
-def uncertainty_band(schedule, bores, solution, p, percent):
-    # lowest and highest total depletion over the entered values and every combination
-    # of low and high values. The entered case is included because after pumping stops
-    # the low and high curves can cross, leaving the entered case outside them
+def parameter_cases(p, percent):
+    # the entered values, then every combination of low and high values
     keys = [k for k, v in percent.items() if v > 0]
-    if not keys:
-        return None
-    totals = [total_depletion(schedule, bores, solution, p).sum(axis=1).to_numpy()]
+    cases = [dict(p)]
     for signs in itertools.product((-1, 1), repeat=len(keys)):
         q = dict(p)
         for key, sign in zip(keys, signs):
             q[key] = p[key] * (1 + sign * percent[key] / 100)
-        totals.append(total_depletion(schedule, bores, solution, q).sum(axis=1).to_numpy())
-    totals = np.array(totals)
+        cases.append(q)
+    return cases
+
+
+def uncertainty_band(schedule, bores, solution, p, percent):
+    # lowest and highest total depletion over the entered values and every combination
+    # of low and high values. The entered case is included because after pumping stops
+    # the low and high curves can cross, leaving the entered case outside them
+    if not any(v > 0 for v in percent.values()):
+        return None
+    totals = np.array([total_depletion(schedule, bores, solution, q).sum(axis=1).to_numpy()
+                       for q in parameter_cases(p, percent)])
     return totals.min(axis=0), totals.max(axis=0)
+
+
+# %% observation bores
+
+def observation_drawdown(schedule, bores, observations, solution, p):
+    # drawdown at the end of each day at each observation bore, summed over the pumping bores
+    n = len(schedule)
+    days = np.arange(n + 1, dtype=float)
+    out = {}
+    for ob in observations:
+        total = np.zeros(n)
+        for b in bores:
+            kernel = np.diff(solutions.drawdown(solution, days, b, ob, p))
+            total += fftconvolve(schedule[b['name']].to_numpy(dtype=float), kernel)[:n]
+        out[ob['name']] = total
+    return pd.DataFrame(out, index=schedule.index)
+
+
+def first_reached(values, level):
+    # index of the first day at or above the level, or None
+    hit = np.nonzero(np.asarray(values) >= level)[0]
+    return int(hit[0]) if len(hit) else None
+
+
+def trigger_analysis(schedule, bores, observations, solution, p, percent, limit=None):
+    # drawdown at each observation bore for every parameter case, its range, and the drawdown
+    # on the first day that total stream depletion reaches the limit (m3/d), for each case
+    cases = parameter_cases(p, percent)
+    drawdowns, at_limit, limit_days = [], [], []
+    for q in cases:
+        dd = observation_drawdown(schedule, bores, observations, solution, q)
+        drawdowns.append(dd)
+        if limit is not None:
+            dep = total_depletion(schedule, bores, solution, q).sum(axis=1).to_numpy()
+            day = first_reached(dep, limit)
+            limit_days.append(day)
+            at_limit.append(None if day is None else dd.iloc[day])
+    stack = np.array([dd.to_numpy() for dd in drawdowns])
+    return dict(entered=drawdowns[0], low=pd.DataFrame(stack.min(axis=0), index=schedule.index,
+                                                      columns=drawdowns[0].columns),
+                high=pd.DataFrame(stack.max(axis=0), index=schedule.index, columns=drawdowns[0].columns),
+                n_cases=len(cases), limit=limit, limit_days=limit_days, at_limit=at_limit)
+
+
+def trigger_summary(analysis, observations, dates, banded, length=('m', 1.0), dd=('m', 1.0)):
+    # one row per observation bore, in the chosen distance and drawdown units.
+    # Observation x and y, trigger levels and drawdowns are held in metres
+    lu, lf = length
+    du, df = dd
+    rows = []
+    entered, high = analysis['entered'], analysis['high']
+    for ob in observations:
+        name = ob['name']
+        row = {'Observation bore': name, f'x ({lu})': ob['x'] / lf, f'y ({lu})': ob['y'] / lf,
+               f'Largest drawdown ({du})': entered[name].max() / df}
+        if banded:
+            row[f'Largest drawdown, highest case ({du})'] = high[name].max() / df
+        level = ob.get('trigger')
+        has_level = level is not None and np.isfinite(level)
+        row[f'Trigger level ({du})'] = level / df if has_level else None
+        if has_level:
+            day = first_reached(entered[name], level)
+            row['Trigger first reached'] = 'Not reached' if day is None else str(dates[day].date())
+            if banded:
+                day = first_reached(high[name], level)
+                row['Trigger first reached, earliest case'] = 'Not reached' if day is None else str(dates[day].date())
+        if analysis['limit'] is not None:
+            first = analysis['at_limit'][0]
+            row[f'Drawdown when depletion reaches the limit ({du})'] = None if first is None else first[name] / df
+            if banded:
+                values = [a[name] / df for a in analysis['at_limit'] if a is not None]
+                row[f'Lowest case ({du})'] = min(values) if values else None
+                row[f'Highest case ({du})'] = max(values) if values else None
+        rows.append(row)
+    return pd.DataFrame(rows)
 
 
 # %% results tables

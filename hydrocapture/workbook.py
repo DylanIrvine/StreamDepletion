@@ -18,13 +18,17 @@ def _write(writer, frame, sheet, date_columns=()):
         ws.set_column(i, i, width, date_format if column in date_columns else None)
 
 
-def build(ts, monthly, summary, bores, settings):
+def build(ts, monthly, summary, bores, settings, drawdown=None, observations=None):
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine='xlsxwriter', datetime_format='yyyy-mm-dd') as writer:
         _write(writer, ts, 'Time series', date_columns=('Date',))
         _write(writer, monthly, 'Monthly')
         _write(writer, summary, 'Summary')
         _write(writer, bores, 'Bores')
+        if drawdown is not None:
+            _write(writer, drawdown, 'Drawdown', date_columns=('Date',))
+        if observations is not None:
+            _write(writer, observations, 'Observation bores')
         settings.to_excel(writer, sheet_name='Settings', index=False)
         ws = writer.sheets['Settings']
         ws.set_column(0, 0, 46)

@@ -41,7 +41,8 @@ st.markdown(
     'out of it or by intercepting groundwater that would have reached it. HydroCAPTURE estimates '
     'how much, and how quickly, using four analytical solutions. Place one or more bores, describe '
     'the aquifer and the stream, set a pumping schedule, and download the results as one Excel '
-    'workbook with plots.\n\n'
+    'workbook with plots. Optional observation bores give the drawdown that monitoring would see, '
+    'to help set trigger levels.\n\n'
     'These solutions suit screening and teaching. They assume a uniform aquifer and a straight '
     'stream, so they do not replace a site-specific model.')
 
@@ -99,7 +100,24 @@ with st.expander('**Background: the solutions and their equations**'):
              r"\lambda' = \frac{\lambda d}{T}")
     st.markdown(
         r"$F$ and $G$ are given in Hunt (2003), equations 46 to 52. They depend on $S/\sigma$ and "
-        r"on $K' d^2 / (B' T)$. The integral is solved numerically." '\n\n'
+        r"on $K' d^2 / (B' T)$. HydroCAPTURE evaluates the same solution in its Laplace-domain form, "
+        r"which is Hunt (1999) with the storage term $Sp$ replaced by "
+        r"$Sp + \varepsilon\sigma p/(\sigma p + \varepsilon)$, $\varepsilon = K'/B'$, and inverts it "
+        r"numerically (Stehfest 1970). This agrees with an independent finite-volume model to better "
+        r"than 0.0001 and avoids small errors (up to about 0.001) in the series form." '\n\n'
+        '**Drawdown at observation bores.** For a bore at $(d, 0)$ and an observation bore at '
+        '$(x, y)$, with $W$ the Theis well function and $u(r) = r^2 S / (4 T t)$:')
+    st.latex(r'\text{Glover and Balmer: } s = \frac{Q}{4\pi T}\left[W(u(r_1)) - W(u(r_2))\right]')
+    st.latex(r'\text{Hantush: } s = \frac{Q}{4\pi T}\left[W(u(r_1)) + W(u(r_2)) - 2\int_0^\infty '
+             r'e^{-\theta} W\!\left(u\left(\sqrt{(x + d + L\theta)^2 + y^2}\right)\right) d\theta\right]')
+    st.latex(r'\text{Hunt (1999): } s = \frac{Q}{4\pi T}\left[W(u(r_1)) - \int_0^\infty e^{-\theta} '
+             r'W\!\left(u\left(\sqrt{(|x| + d + 2T\theta/\lambda)^2 + y^2}\right)\right) d\theta\right]')
+    st.markdown(
+        r'where $r_1 = \sqrt{(x - d)^2 + y^2}$ and $r_2 = \sqrt{(x + d)^2 + y^2}$. For Hunt (2003) '
+        r'the Hunt (1999) drawdown is used in Laplace space with the storage term above, giving the '
+        r'drawdown in the pumped aquifer. Glover and Balmer gives zero drawdown across the stream, and '
+        r'Hantush has no aquifer there, so observation bores across the stream need Hunt (1999) or '
+        r'Hunt (2003).' '\n\n'
         '**Changing rates and several bores.** The solutions are linear, so each change in pumping '
         'rate is treated as a new bore switched on at that time, and the effects are added. The '
         'same applies to several bores: the total depletion is the sum for each bore.\n\n'
@@ -109,8 +127,8 @@ with st.expander('**Background: the solutions and their equations**'):
         '- The stream is straight, very long, stays connected to the aquifer, and its level does '
         'not change.\n'
         '- Pumping does not change recharge or evapotranspiration.\n'
-        '- Only the distance of a bore from the stream matters. Its position along the stream '
-        'does not change the total.')
+        '- Only the distance of a bore from the stream matters for depletion. Its position along '
+        'the stream does not change the total, but it does change drawdown at an observation bore.')
 
 with st.expander('**How to cite and references**'):
     st.write(
@@ -129,10 +147,15 @@ with st.expander('**How to cite and references**'):
         'Other references:\n\n'
         'Jenkins, C.T. (1968). Techniques for computing rate and volume of stream depletion by '
         'wells. Ground Water 6(2), 37-46.\n\n'
+        'Stehfest, H. (1970). Algorithm 368: Numerical inversion of Laplace transforms. '
+        'Communications of the ACM 13(1), 47-49.\n\n'
+        'Theis, C.V. (1935). The relation between the lowering of the piezometric surface and the '
+        'rate and duration of discharge of a well using ground-water storage. Eos, Transactions '
+        'American Geophysical Union 16(2), 519-524.\n\n'
         'Theis, C.V. (1941). The effect of a well on the flow of a nearby stream. Eos, Transactions '
         'American Geophysical Union 22(3), 734-738.\n\n'
-        'The numerical solution of the Hunt (2003) integral is adapted from pycap-dss, U.S. '
-        'Geological Survey (public domain). https://github.com/DOI-USGS/pycap-dss')
+        'Hunt (2003) is checked against the series form in pycap-dss, U.S. Geological Survey '
+        '(public domain). https://github.com/DOI-USGS/pycap-dss')
 
 # %% 1. solution
 
@@ -184,8 +207,57 @@ if len({b['name'] for b in bores}) < len(bores):
 if any(b['x'] == 0 for b in bores):
     problems.append('A bore cannot sit on the stream (x = 0).')
 
+st.subheader('Observation bores (optional)')
+st.caption('Monitoring bores where drawdown is wanted, for example to set trigger levels. Use the '
+           'same x and y as the pumping bores. A trigger level is optional. Delete the row if none '
+           'are needed.')
+dd_unit = st.selectbox('Drawdown unit', list(units.DRAWDOWN))
+default_obs = pd.DataFrame({'Name': ['Obs 1'], 'x': [250.0], 'y': [100.0], 'Trigger level': [None]},
+                           ).astype({'Trigger level': float})
+obs_table = st.data_editor(
+    default_obs, num_rows='dynamic', width='stretch', hide_index=True, key='obs_table',
+    column_config={
+        'Name': st.column_config.TextColumn('Name', required=True),
+        'x': st.column_config.NumberColumn(f'x ({length_unit})', required=True),
+        'y': st.column_config.NumberColumn(f'y ({length_unit})', required=True, default=0.0),
+        'Trigger level': st.column_config.NumberColumn(f'Trigger level, drawdown ({dd_unit})', min_value=0.0),
+    })
+observations = []
+for _, row in obs_table.dropna(subset=['Name', 'x']).iterrows():
+    level = row['Trigger level']
+    observations.append(dict(name=str(row['Name']).strip(),
+                             x=float(row['x']) * units.LENGTH[length_unit],
+                             y=float(0.0 if pd.isna(row['y']) else row['y']) * units.LENGTH[length_unit],
+                             trigger=None if pd.isna(level) else float(level) * units.DRAWDOWN[dd_unit]))
+if len({o['name'] for o in observations}) < len(observations):
+    problems.append('Give each observation bore a different name.')
+for o in observations:
+    for b in bores:
+        if np.hypot(o['x'] - b['x'], o['y'] - b['y']) < 0.5:
+            problems.append(f"Observation bore {o['name']} sits on pumping bore {b['name']}. Drawdown "
+                            'in a pumping bore needs its radius and losses, which these solutions do not include.')
+if observations and key == 'hantush' and any(o['x'] * b['x'] < 0 for o in observations for b in bores):
+    problems.append('Hantush (1965) has no aquifer across the stream. Put observation bores on the same '
+                    'side as the pumping bores, or use Hunt (1999) or Hunt (2003).')
+if observations and key == 'glover' and any(o['x'] * b['x'] <= 0 for o in observations for b in bores):
+    st.caption('With Glover and Balmer the stream fully penetrates the aquifer, so a bore on the other '
+               'side of the stream causes no drawdown at an observation bore.')
+
+limit_mode = st.radio('Link triggers to a stream depletion limit', ['No limit', 'Depletion rate',
+                      '% of the peak pumping rate'], horizontal=True,
+                      help='Reports the drawdown at each observation bore on the day total stream '
+                           'depletion first reaches this limit.')
+limit_value = None
+if limit_mode == 'Depletion rate':
+    limit_value = st.number_input(f'Depletion limit ({flow_unit})', value=5.0, min_value=0.0, format='%g')
+elif limit_mode == '% of the peak pumping rate':
+    limit_value = st.number_input('Depletion limit (% of the peak total pumping rate)', value=25.0,
+                                  min_value=0.0, max_value=100.0, format='%g')
+if limit_mode != 'No limit' and not observations:
+    problems.append('Add an observation bore to link triggers to a depletion limit.')
+
 if bores and not any(b['x'] == 0 for b in bores):
-    figure = plots.diagram(key, bores, length_unit, units.LENGTH[length_unit], colours)
+    figure = plots.diagram(key, bores, length_unit, units.LENGTH[length_unit], colours, observations)
     st.pyplot(figure)
     plt.close(figure)
     st.caption('Conceptual set-up for the chosen solution. The symbols match the inputs below.')
@@ -322,9 +394,9 @@ else:
 # %% 5. uncertainty
 
 st.header('5. Uncertainty')
-st.caption('Optional. Give a plus or minus percentage for any value. The shaded range on the '
-           'depletion plot is the lowest and highest result over the entered values and every '
-           'combination of low and high values.')
+st.caption('Optional. Give a plus or minus percentage for any value. The shaded ranges on the '
+           'depletion and drawdown plots are the lowest and highest results over the entered values '
+           'and every combination of low and high values.')
 percent = {}
 uncertain_columns = st.columns(len(engine.UNCERTAIN[solution]))
 for column, (name, label) in zip(uncertain_columns, engine.UNCERTAIN[solution].items()):
@@ -391,8 +463,42 @@ if st.button('Run', type='primary', disabled=bool(problems)):
                          for name, value in percent.items()]
             settings += [('Rate unit for the results', out_flow_unit),
                          ('Volume unit for the results', out_volume_unit)]
+
+            drawdown_out = obs_out = None
+            if observations:
+                limit = None
+                if limit_mode == 'Depletion rate':
+                    limit = limit_value * units.FLOW[flow_unit]
+                    settings.append(('Stream depletion limit', f'{limit_value:g} {flow_unit}'))
+                elif limit_mode == '% of the peak pumping rate':
+                    limit = limit_value / 100 * schedule.sum(axis=1).max()
+                    settings.append(('Stream depletion limit', f'{limit_value:g}% of the peak total '
+                                     f'pumping rate ({limit:g} m³/d)'))
+                analysis = engine.trigger_analysis(schedule, bores, observations, solution, p, percent, limit)
+                banded = analysis['n_cases'] > 1
+                dates = ts['Date']
+                ddf = units.DRAWDOWN[dd_unit]
+                obs_summary = engine.trigger_summary(analysis, observations, dates, banded,
+                                                     (length_unit, units.LENGTH[length_unit]), (dd_unit, ddf))
+                drawdown_out = pd.DataFrame({'Date': dates, 'Day': ts['Day']})
+                for o in observations:
+                    drawdown_out[f"Drawdown, {o['name']} ({dd_unit})"] = analysis['entered'][o['name']].to_numpy() / ddf
+                    if banded:
+                        drawdown_out[f"Drawdown, {o['name']}, low ({dd_unit})"] = analysis['low'][o['name']].to_numpy() / ddf
+                        drawdown_out[f"Drawdown, {o['name']}, high ({dd_unit})"] = analysis['high'][o['name']].to_numpy() / ddf
+                obs_out = obs_summary
+                limit_day = analysis['limit_days'][0] if analysis['limit_days'] else None
+                result.update(analysis=analysis, observations=observations, obs_summary=obs_summary,
+                              dd_unit=dd_unit, limit=limit,
+                              limit_date=None if limit_day is None else dates.iloc[limit_day])
+                settings += [(f"Observation bore {o['name']}",
+                              f"x = {o['x'] / units.LENGTH[length_unit]:g} {length_unit}, "
+                              f"y = {o['y'] / units.LENGTH[length_unit]:g} {length_unit}"
+                              + ('' if o['trigger'] is None else f", trigger {o['trigger'] / ddf:g} {dd_unit}"))
+                             for o in observations]
             settings_table = pd.DataFrame(settings, columns=['Setting', 'Value']).astype({'Value': str})
-            result['xlsx'] = workbook.build(ts_out, monthly_out, result['summary'], bores_out, settings_table)
+            result['xlsx'] = workbook.build(ts_out, monthly_out, result['summary'], bores_out, settings_table,
+                                            drawdown_out, obs_out)
             st.session_state['result'] = result
 
         new_total = run_counter.increment_runs()
@@ -468,6 +574,32 @@ if 'result' in st.session_state:
 
     st.subheader('Summary by bore')
     st.dataframe(r['summary'], width='stretch', hide_index=True)
+
+    if r.get('observations'):
+        st.subheader('Observation bores and trigger levels')
+        a = r['analysis']
+        show(plots.drawdown(ts['Date'], a, r['observations'], r['dd_unit'], units.DRAWDOWN[r['dd_unit']],
+                            colours, r.get('limit_date')), f'{prefix}_drawdown')
+        st.dataframe(r['obs_summary'], width='stretch', hide_index=True)
+        notes = ['Drawdown is the change caused by the pumping bores, from the start of the '
+                 'calculation. Add it to the expected seasonal low to compare with a water level.']
+        if a['n_cases'] > 1:
+            notes.append('The earliest case is the first day the highest drawdown over the uncertainty '
+                         'range reaches the trigger.')
+        if r.get('limit') is not None:
+            if r.get('limit_date') is None:
+                notes.append('Stream depletion does not reach the limit in this calculation with the '
+                             'entered values.')
+            else:
+                notes.append(f"With the entered values, stream depletion first reaches the limit on "
+                             f"{r['limit_date'].date()}. A trigger set at the drawdown on that day is "
+                             'reached at the same time. If the uncertainty range is used, the lowest '
+                             'case is the trigger that is reached no later than the depletion limit in '
+                             'every case calculated.')
+            notes.append('Depletion keeps rising after pumping stops while drawdown recovers, so a '
+                         'drawdown trigger does not guard against depletion that arrives after pumping '
+                         'ends. Check the depletion plot for that lag.')
+        st.caption(' '.join(notes))
 
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as archive:

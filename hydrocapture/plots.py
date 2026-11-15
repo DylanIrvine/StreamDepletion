@@ -69,26 +69,37 @@ def bore_colours(c, n):
 
 # %% conceptual diagram
 
-def _aerial(ax, bores, unit, factor, c):
+def _aerial(ax, bores, unit, factor, c, observations=()):
     xs = [b['x'] / factor for b in bores]
     ys = [b['y'] / factor for b in bores]
-    reach = max(max(abs(x) for x in xs), 1e-9)
-    half_y = max(max(abs(y) for y in ys), 0.35 * reach)
-    left = -1.25 * reach if min(xs) < 0 else -0.25 * reach
-    right = 1.25 * reach if max(xs) > 0 else 0.25 * reach
+    oxs = [o['x'] / factor for o in observations]
+    oys = [o['y'] / factor for o in observations]
+    all_x, all_y = xs + oxs, ys + oys
+    reach = max(max(abs(x) for x in all_x), 1e-9)
+    half_y = max(max(abs(y) for y in all_y), 0.35 * reach)
+    left = -1.25 * reach if min(all_x) < 0 else -0.25 * reach
+    right = 1.25 * reach if max(all_x) > 0 else 0.25 * reach
     ax.axvspan(-0.03 * reach, 0.03 * reach, color=c['Stream and depletion'], alpha=0.6, lw=0)
     ax.text(0, 1.22 * half_y, 'Stream', ha='center', va='bottom', color=c['Stream and depletion'])
     for b, x, y, colour in zip(bores, xs, ys, bore_colours(c, len(bores))):
         ax.plot([0, x], [y, y], color='0.5', lw=0.8, ls='--')
         ax.plot(x, y, 'o', color=colour, ms=6, zorder=3)
         ax.annotate(b['name'], (x, y), textcoords='offset points', xytext=(0, 7), ha='center')
+    for o, x, y in zip(observations, oxs, oys):
+        ax.plot(x, y, '^', mfc='white', mec='0.2', mew=1.1, ms=6, zorder=3)
+        ax.annotate(o['name'], (x, y), textcoords='offset points', xytext=(0, -12), ha='center',
+                    color='0.25', fontsize=8)
     x0, y0 = xs[0], ys[0]
     ax.annotate('d', (x0 / 2, y0), textcoords='offset points', xytext=(0, -11), ha='center')
+    if observations:
+        ax.plot([], [], 'o', color=bore_colours(c, 1)[0], ms=5, label='Pumping bore')
+        ax.plot([], [], '^', mfc='white', mec='0.2', ms=5, label='Observation bore')
+        ax.legend(loc='lower left', fontsize=7, handletextpad=0.3, borderaxespad=0.2)
     ax.set_xlim(left, right)
     ax.set_ylim(-1.2 * half_y, 1.2 * half_y)
     ax.set_xlabel(f'x: distance from the stream ({unit})')
     ax.set_ylabel(f'y: distance along the stream ({unit})')
-    ax.text(0.98, 0.98, 'Aerial view', transform=ax.transAxes, color='0.4', ha='right', va='top')
+    ax.text(0.98, 0.02, 'Aerial view', transform=ax.transAxes, color='0.4', ha='right', va='bottom')
 
 
 def _section(ax, key, c):
@@ -166,9 +177,9 @@ def _section(ax, key, c):
     ax.text(0.02, -0.06, 'Cross section, not to scale', transform=ax.transAxes, color='0.4')
 
 
-def diagram(key, bores, unit, factor, c):
+def diagram(key, bores, unit, factor, c, observations=()):
     fig, axes = plt.subplots(1, 2, figsize=(17 / 2.54, 8 / 2.54), gridspec_kw=dict(width_ratios=[1, 1.25]))
-    _aerial(axes[0], bores, unit, factor, c)
+    _aerial(axes[0], bores, unit, factor, c, observations)
     _section(axes[1], key, c)
     fig.tight_layout()
     return fig
@@ -248,4 +259,35 @@ def monthly(table, unit, factor, c):
     ax.set_xlim(-0.6, len(table) - 0.4)
     ax.set_ylabel(f'Monthly volume ({unit})')
     legend_above(ax)
+    return fig
+
+
+def drawdown(dates, analysis, observations, unit, factor, c, limit_date=None):
+    # drawdown at each observation bore, plotted downwards, with its trigger level
+    fig, ax = new_fig(height_cm=10)
+    colours = [c['Stream and depletion'], c['Bores and comparison'], c['Extra 1'], c['Extra 2'],
+               c['Extra 3'], c['Pumping']]
+    banded = analysis['n_cases'] > 1
+    for i, ob in enumerate(observations):
+        colour = colours[i % len(colours)]
+        name = ob['name']
+        if banded:
+            ax.fill_between(dates, analysis['low'][name] / factor, analysis['high'][name] / factor,
+                            color=colour, alpha=0.2, lw=0)
+        ax.plot(dates, analysis['entered'][name] / factor, color=colour, lw=1.6, label=name)
+        level = ob.get('trigger')
+        if level is not None and np.isfinite(level):
+            ax.axhline(level / factor, color=colour, lw=1, ls='--')
+            ax.annotate(f'Trigger, {name}', (1.0, level / factor), xycoords=('axes fraction', 'data'),
+                        xytext=(-2, 2), textcoords='offset points', ha='right', va='bottom',
+                        color=colour, fontsize=7)
+    if limit_date is not None:
+        ax.axvline(limit_date, color='0.35', lw=0.9, ls=':')
+        ax.annotate('Depletion reaches the limit', (limit_date, 1.0), xycoords=('data', 'axes fraction'),
+                    xytext=(3, -3), textcoords='offset points', ha='left', va='top', color='0.35', fontsize=7)
+    date_axis(ax, dates)
+    ax.set_ylim(bottom=0)
+    ax.invert_yaxis()
+    ax.set_ylabel(f'Drawdown ({unit})')
+    legend_above(ax, ncols=4)
     return fig

@@ -2,10 +2,11 @@
 
 Stream depletion from pumping bores, using analytical solutions.
 
-Current version: 0.1.0
+Current version: 0.2.0
 
 A Streamlit app that estimates how much water one or more pumping bores take
-from a nearby stream, and how quickly. It is part of the same suite as HydroSILO,
+from a nearby stream, and how quickly, and the drawdown this causes at
+observation bores (for example, to help set trigger levels). It is part of the same suite as HydroSILO,
 HydroPOINT, HydroSTITCH and the Hydrochem Workbench.
 
 ## Using it
@@ -14,6 +15,8 @@ HydroPOINT, HydroSTITCH and the Hydrochem Workbench.
 2. Add the bores: a name, x (distance from the stream), y (position along the
    stream) and a pumping rate. The stream runs along x = 0. A diagram shows the
    bores from above and the set-up in cross section.
+   Optionally add observation bores (name, x, y and a trigger level), and a
+   stream depletion limit to link the triggers to.
 3. Enter the aquifer and stream values. Where there is a choice, such as
    transmissivity or hydraulic conductivity and thickness, pick one and the
    matching boxes become active. Each value has its own unit drop-down.
@@ -45,8 +48,26 @@ how the streambed is described.
 - **Several bores.** The total is the sum for each bore. Only the distance from
   the stream matters, so y changes the diagram but not the result, and a bore on
   the other bank counts by its distance.
-- **Hunt (2003).** The integral is solved by Gauss-Legendre quadrature on a
-  log-spaced set of times and interpolated to daily values.
+- **Hunt (2003).** Evaluated in its Laplace-domain form, which is Hunt (1999)
+  with the storage term Sp replaced by Sp + εσp/(σp + ε), ε = K'/B', and
+  inverted numerically (Stehfest 1970). This matches an independent 1D
+  finite-volume model to better than 0.0001 and a 30-digit Talbot inversion to
+  2e-6. The series form used in STRMDEPL08 and pycap-dss differs from it by up
+  to about 0.001 (kept in the code as `_hunt03_closed_form` for comparison).
+- **Observation bores.** Drawdown uses each solution's own drawdown: Theis with
+  an image bore (Glover and Balmer), the semipervious-boundary image integral
+  (Hantush 1965), Hunt (1999) equations 29 to 31, and for Hunt (2003) the Hunt
+  (1999) drawdown in Laplace space with the storage term above. Drawdown is
+  summed over pumping bores and over the daily schedule, so the position along
+  the stream (y) matters here. Glover and Balmer gives zero drawdown across the
+  stream and Hantush has no aquifer there.
+- **Triggers.** For each observation bore the app reports the first date the
+  trigger level is reached, and the drawdown on the day total stream depletion
+  first reaches the chosen limit. With an uncertainty range it also reports the
+  earliest date over all cases, and the lowest and highest drawdown at the
+  limit. The lowest is the trigger that is reached no later than the limit in
+  every case calculated. Depletion keeps rising after pumping stops while
+  drawdown recovers, so a drawdown trigger does not cover that lag.
 - **Uncertainty.** The range is the lowest and highest total over the entered
   values and every combination of low and high values. It is a range of cases,
   not a statistical confidence interval.
@@ -56,9 +77,12 @@ how the streambed is described.
 ## Checks
 
 The test suite compares the code with published values: Glover and Balmer (1954)
-table 1, and the U.S. Geological Survey STRMDEPL08 example for Hunt (2003). It
-also checks the limits (Hunt 1999 with a very high conductance gives Glover and
-Balmer) and that superposition matches a direct sum.
+table 1, and the U.S. Geological Survey STRMDEPL08 example for Hunt (2003), plus
+a 30-digit Talbot inversion and a finite-volume model for Hunt (2003). Drawdown
+is checked against adaptive quadrature of Hunt (1999) and Hantush (1965), and
+against an independent Talbot inversion for Hunt (2003). It also checks the
+limits (very high or very low streambed conductance or leakance, and Hunt 2003
+without aquitard storage), and that superposition matches a direct sum.
 
 ```bash
 pip install pytest openpyxl
@@ -112,14 +136,14 @@ token = "<REST token>"
 
 ## How to cite
 
-Irvine, D.J. (2026). HydroCAPTURE (version 0.1.0) [Web application]. Charles
+Irvine, D.J. (2026). HydroCAPTURE (version 0.2.0) [Web application]. Charles
 Darwin University. https://hydrocapture.streamlit.app/
 
 Please also cite the solution used. The references are listed in the app.
 
 ## Licence
 
-MIT. See `LICENSE`. The numerical solution of the Hunt (2003) integral is
+MIT. See `LICENSE`. The series form of Hunt (2003), kept for comparison, is
 adapted from pycap-dss (U.S. Geological Survey, public domain).
 
 ## Credits
