@@ -1,0 +1,8 @@
+[theme]
+# dark theme, red highlight
+base = "dark"
+primaryColor = "#FF4B4B"
+
+[browser]
+# no usage statistics
+gatherUsageStats = false
