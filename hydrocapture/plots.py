@@ -19,7 +19,7 @@ DEFAULT_COLOURS = {
 }
 WATERMARK = 'Dylan Irvine, Charles Darwin University'
 MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-SOIL = '#C8B48C'
+SOIL = '#D7B984'
 BED = '#7A5C3A'
 
 plt.rcParams.update({
@@ -94,7 +94,7 @@ def _aerial(ax, bores, unit, factor, c, observations=()):
     if observations:
         ax.plot([], [], 'o', color=bore_colours(c, 1)[0], ms=5, label='Pumping bore')
         ax.plot([], [], '^', mfc='white', mec='0.2', ms=5, label='Observation bore')
-        ax.legend(loc='lower left', fontsize=7, handletextpad=0.3, borderaxespad=0.2)
+        ax.legend(loc='upper right', fontsize=7, handletextpad=0.3, borderaxespad=0.2)
     ax.set_xlim(left, right)
     ax.set_ylim(-1.2 * half_y, 1.2 * half_y)
     ax.set_xlabel(f'x: distance from the stream ({unit})')
@@ -109,7 +109,7 @@ def _section(ax, key, c):
     two_layer = key == 'hunt03'
     aquitard_base = 2.9
 
-    ax.add_patch(Rectangle((0, base), 10, ground - base, color=SOIL, alpha=0.35, lw=0))
+    ax.add_patch(Rectangle((0, base), 10, ground - base, color=SOIL, lw=0))
     if two_layer:
         ax.add_patch(Rectangle((0, aquitard_base), 10, ground - aquitard_base, color=BED, alpha=0.3, lw=0))
         ax.plot([0, 10], [aquitard_base, aquitard_base], color=BED, lw=0.8)
@@ -171,8 +171,9 @@ def _section(ax, key, c):
     ax.text(4.9, 1.4, 'Aquifer: T, S', ha='center', va='center')
     ax.text(5.2, base - 0.18, 'Impermeable base', ha='center', va='center', fontsize=8)
 
+    # bottom of the impermeable base sits on the axes edge, level with the x-axis of the aerial view
     ax.set_xlim(0, 10)
-    ax.set_ylim(0, 6.9)
+    ax.set_ylim(base - 0.35, 6.9)
     ax.axis('off')
     ax.text(0.02, -0.06, 'Cross section, not to scale', transform=ax.transAxes, color='0.4')
 
