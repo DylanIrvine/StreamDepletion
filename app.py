@@ -19,8 +19,8 @@ from hydrocapture import engine, plots, run_counter, solutions, units, workbook
 APP_NAME = 'HydroCAPTURE'
 # app address, used in the citation
 APP_URL = 'https://hydrocapture.streamlit.app/'
-LOGO = 'logo/hydrocapture_badge.png'
-FAVICON = 'logo/hydrocapture_favicon.png'
+LOGO = 'logo/HydroCAPTURE_logo.png'
+FAVICON = 'logo/HydroCAPTURE_icon.png'
 MONTHS = plots.MONTHS
 
 st.set_page_config(page_title=APP_NAME, page_icon=FAVICON)
