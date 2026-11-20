@@ -143,7 +143,7 @@ Please also cite the solution used. The references are listed in the app.
 
 ## Licence
 
-MIT. See `LICENSE`. The series form of Hunt (2003), kept for comparison, is
+Copyright (c) 2026 Charles Darwin University. All rights reserved. See `LICENSE`. The series form of Hunt (2003), kept for comparison, is
 adapted from pycap-dss (U.S. Geological Survey, public domain).
 
 ## Credits

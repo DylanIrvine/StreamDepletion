@@ -69,8 +69,8 @@ with st.expander('**Privacy and data handling**'):
         'using the public web version, your inputs travel to that host (which may be outside '
         'Australia). The hosting provider and the Streamlit framework may use their own cookies '
         'and keep their own server logs, under their own privacy policies.\n'
-        '- If your data are confidential or subject to a data agreement, run the app on your own '
-        'machine. The code is open source (MIT).')
+        '- If your data are confidential or subject to a data agreement, contact the author about '
+        'running the app on your own machine.')
 
 with st.expander('**Background: the solutions and their equations**'):
     st.markdown(
@@ -258,6 +258,7 @@ if limit_mode != 'No limit' and not observations:
 
 if bores and not any(b['x'] == 0 for b in bores):
     figure = plots.diagram(key, bores, length_unit, units.LENGTH[length_unit], colours, observations)
+    plots.add_watermark(figure)
     st.pyplot(figure)
     plt.close(figure)
     st.caption('Conceptual set-up for the chosen solution. The symbols match the inputs below.')
